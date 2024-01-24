@@ -9,7 +9,7 @@
 ## Sobre
 
  
- 
+
 ## Sumário 
 <!--ts-->
    * [Sobre](#sobre)
@@ -25,11 +25,34 @@
  
 ## Features
 
-- [x] Renumerar as Quadras
-- [ ] Renumerar os Lotes
-- [ ] Renumerar os imóveis
+- [x] Numeração de quadras - Versão 1
+- [ ] Numeração de quadras - Versão 2
+- [ ] Versão 3
 
+### Versão 1:
+  - [1] Consulta no banco as quadras
+  - [2] Criar um Bounding Box envolvendo todas as quadras
+  - [3] Selecionar a coordenada do canto inferior e esquerdo do BBox como ponto inicial
+  - [4] Visita a quadra mais próxima do ponto inicial, e atribui um código a ela.
+        Enquanto houver quadras com cod igual 0.
+  - [5] Busca o vizinho mais próximo da quadra atual, e atribui um código a ela. 
+          Repete esta etapa até não ter mais vizinho próximo.
+          Se não houver vizinho próximo, volta ao passo 4.
+  - [6] Imprime o resultado.
 
+### Versão 2:
+  - [1] Consulta no banco as quadras
+  - [2] Criar um Bounding Box envolvendo todas as quadras e selecionar a coordenada do canto inferior e esquerdo do BBox como ponto inicial
+  - [3] A partir do ponto inicial, encontre as quadras mais próximas
+  - [4] Obtenha os BBox das quadras e o ponto mais inferior esquerdo
+  - [5] Escolhe a quadra com menor latitude e maior longitude 
+        -> Substitua o ponto inicial por essa primeira quadra escolhida
+  - [6] Numera essa quadra e volta ao passo 3.
+  - [7] Repete até não ter mais quadras à direita.
+  - [8] Redefina o valor do ponto inicial e volte ao passo 3 enquanto houver quadras sem número.
+  - [9] Imprime o resultado.
+
+ 
 ## Instalação
 ### Pré-requisitos 
 
