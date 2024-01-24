@@ -1,0 +1,4 @@
+geopandas==0.9.0
+psycopg2==2.9.1
+shapely==1.8.0
+matplotlib==3.4.2
