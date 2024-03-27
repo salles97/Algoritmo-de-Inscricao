@@ -32,33 +32,13 @@ gdf['cod'] = 0
 
 cod = 1
  
+ 
 def gerar_bbox_quadras(gdf):
     # Criar colunas para armazenar os Bounding Boxes e os pontos mais inferiores esquerdos
     gdf['bbox'] = gdf['geometry'].bounds.apply(lambda row: (row['minx'], row['miny'], row['maxx'], row['maxy']), axis=1)
     gdf['min_left_point'] = gdf.apply(lambda row: (row['bbox'][0], row['bbox'][1]), axis=1)
     gdf['cod'] = 0
     return gdf
-
-
-def find_closest_quadras(gdf, current_point, n=5):
-    # Cria um objeto Point com as coordenadas do ponto
-    point = Point(current_point)
-    
-    # Filtra os polígonos com cod = 0
-    gdf_filtered = gdf[gdf['cod'] == 0]
-    
-    # Verifica se há polígonos disponíveis
-    if gdf_filtered.empty: 
-        return None
-    
-    # Calcula as distâncias entre o ponto e todos os polígonos disponíveis
-    distances = gdf_filtered['geometry'].apply(lambda geom: point.distance(geom))
-    
-    # Obtém os índices dos n polígonos mais próximos
-    closest_quadras = distances.nsmallest(n).index.tolist()
-    
-    return closest_quadras
-
  
 def find_closest_to_initial_point(gdf, current_point):
     # Cria um objeto Point com as coordenadas do ponto
@@ -70,87 +50,83 @@ def find_closest_to_initial_point(gdf, current_point):
     # Verifica se há polígonos disponíveis
     if gdf_filtered.empty: 
         return None
-    
-       # Calcula as distâncias entre o ponto e todos os polígonos disponíveis
+     
+    # Calcula as distâncias entre o ponto e todos os polígonos disponíveis
     distances = gdf_filtered['geometry'].apply(lambda geom: point.distance(geom))
     
+    # Obtém os índices dos n polígonos mais próximos
+    closest_quadra = distances.nsmallest(5).tolist()
+    
     # Obtém o índice do polígono mais próximo com base na menor latitude
-    closest_quadra = distances.idxmin()
-    print(closest_quadra)
+    closest_quadra = gdf_filtered.loc[distances.idxmin()]
+    
+    # print('closest_quadra', closest_quadra)
     
     return closest_quadra
+ 
+def find_right_neighbor(gdf, current_block):
+    # Obter o bounding box do current_block
+    miny, maxy = current_block['geometry'].bounds[1], current_block['geometry'].bounds[3]
 
-def choose_next_polygon(gdf, candidates, current_point, initial_point): 
-    # Verifica se há candidatos
-    if not candidates:
-        return None
-    
-   # Se o ponto atual for igual ao ponto inicial, escolhe o mais próximo com cod = 0
-    if current_point == initial_point:
-        distances_to_initial = gdf.loc[candidates, 'geometry'].apply(lambda geom: initial_point.distance(geom))
-        closest_with_cod_zero = distances_to_initial.idxmin()
-        print('Current = Initial Point')
-        return closest_with_cod_zero
-    
-    # Obtém os BBox dos candidatos
-    candidates_bbox = gdf.loc[candidates, 'geometry'].bounds 
-    print('candidates_bbox ', candidates_bbox)
-    
-    # Coordenada x do ponto atual
-    current_x = current_point[0] if isinstance(current_point, tuple) else current_point.x
-    print('current_x ', current_x)
-    
-    # Filtra os candidatos que estão à direita do ponto atual
-    right_of_current = candidates_bbox['minx'] > current_x
-    
-    # Verifica se há candidatos à direita
-    if right_of_current.any():  # Verifica se pelo menos um é True
-        # Seleciona o polígono com menor latitude e maior longitude
-        right_candidates = [candidate for candidate, is_right in zip(candidates, right_of_current) if is_right]
-        chosen_index = candidates_bbox.loc[right_candidates, 'miny'].idxmin()
-        print('right_of_curent')
-        return chosen_index
-    else:
-        return None
+    # Criar um box (polígono retangular) para a faixa de latitude do current_block
+    lat_box = box(gdf.total_bounds[0], miny, gdf.total_bounds[2], maxy)
 
+    # Filtrar geometrias que intersectam com a faixa de latitude do current_block
+    valid_geometries = gdf[gdf.intersects(lat_box)]
 
-def caminho(gdf,  initial_point,   i):
+    # Verificar se há geometrias dentro da faixa de longitude
+    if not valid_geometries.empty:
+        # Filtrar geometrias com minx > maxx do current_block
+        candidate_geometries = valid_geometries[valid_geometries['geometry'].bounds['minx'] > current_block['geometry'].bounds[0]]
+
+        # Verificar se há geometrias candidatas
+        if not candidate_geometries.empty:
+            # Ordenar candidatos pela coordenada x
+            right_neighbor = candidate_geometries.loc[candidate_geometries.bounds['minx'].idxmin()]
+            return right_neighbor
+
+    return None
+
+def caminho(gdf,  initial_point ):
    
     gdf = gerar_bbox_quadras(gdf)  
     # Converter a coluna 'min_left_point' para uma string representando um ponto
     # Agora, salve o GeoDataFrame
     gdf_aux = gdf.drop('min_left_point', axis=1).drop('bbox', axis=1)
     gdf_aux.to_file('./gdf_antes_de_numerar.shp', driver='ESRI Shapefile' )
-
-    current_point = initial_point
-    last_change_count = 0
-
-    while gdf['cod'].eq(0).any() and last_change_count < len(gdf):
-        print("Current Point:", current_point)
-        candidates = find_closest_quadras(gdf, current_point)
-        print("Candidates:", candidates)
-        next_polygon = choose_next_polygon(gdf, candidates, current_point, initial_point)
-        print("Next Polygon:", next_polygon)
-
-        # Se houver polígono à direita!
-        if next_polygon is not None:
-            gdf.loc[next_polygon, 'cod'] = i
-            i += 1  
-            current_point = gdf.loc[next_polygon, 'min_left_point']
-            last_change_count = 0
+    
+    # // Encontrar o ponto min xy
+    minXY = initial_point
+  
+    # encontrar a geometria mais proxima
+    current_block = find_closest_to_initial_point(gdf, minXY) 
+    cod = 1
+    
+    while gdf['cod'].eq(0).any():
+        print(f"Current cod values: {gdf['cod'].unique()}")  # Adiciona esta linha para imprimir os valores de 'cod'
+        print(f"Number of remaining blocks: {len(gdf[gdf['cod'] == 0])}")  # Adiciona esta linha para imprimir o número de blocos restantes
+        
+        gdf.loc[gdf['geometry'] == current_block['geometry'], 'cod'] = cod
+        cod += 1 
+        
+        if len(gdf[gdf['cod'] == 0]) == 1:
+            break
+        # Chamar a função que retorna o vizinho à direita
+        vizinho = find_right_neighbor(gdf[gdf['cod'] == 0], current_block)
+        print('Vizinho: ', vizinho)
+        
+        if vizinho is not None:
+            current_block = vizinho 
         else:
-            last_change_count += 1
-            closest_to_initial = find_closest_to_initial_point(gdf, initial_point)
-            
-            current_point = choose_next_polygon(gdf, closest_to_initial, current_point, initial_point)
-            
-            
+            current_block = find_closest_to_initial_point(gdf.loc[gdf.cod == 0], minXY)  
+            if current_block is None:
+                break
+            print('Sem vizinho')
+
 
     gdf_aux = gdf.drop('min_left_point', axis=1).drop('bbox', axis=1)
     gdf_aux.to_file('./gdf_depois_de_numerar.shp', driver='ESRI Shapefile' )
 
-    
-    
     
 # Plotar o GeoDataFrame
 fig, ax = plt.subplots()
@@ -163,7 +139,7 @@ gpd.GeoSeries([bbox_polygon]).plot(ax=ax, facecolor='none', edgecolor='red', lin
 gpd.GeoSeries([coord_inicial]).plot(ax=ax, color='blue', markersize=50, label='Ponto Inicial')
 
 # Chama a função inicialmente
-caminho(gdf,  coord_inicial,   1)
+caminho(gdf,  coord_inicial )
 # Plotar os polígonos com os códigos finais
 gdf.plot(ax=ax, column='cod', legend=True, cmap='viridis', legend_kwds={'label': "Códigos"})
 
