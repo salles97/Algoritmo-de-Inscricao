@@ -7,16 +7,14 @@ import matplotlib.pyplot as plt
 # Conectar ao banco de dados
 conn = psycopg2.connect(database="Itanhandu_stagging", user="postgres", password="654741", host="localhost", port="5432")
 
+# Variável global para armazenar o código
+cod = 0
+
 # Função para buscar geometrias dos lotes por quadra
 def get_lotes_por_quadra(setor_cod, quadra_cod):
     cur = conn.cursor()
     cur.execute(f"SELECT l.id, ST_AsText(ST_Buffer(l.geom, 0.1)) as geometry, SUM(ST_Length(t.geom)) as tam_testada FROM dado_novo.lote l JOIN dado_novo.testada t ON t.lote_id = l.id WHERE l.setor_cod = {setor_cod} AND l.quadra_cod = '{quadra_cod}' GROUP BY l.id, geometry")
     return cur.fetchall()
-
-# def get_quadra(setor_cod, quadra_cod):
-#     cur = conn.cursor()
-#     cur.execute(f"SELECT id, ST_AsText(geom) as geometry FROM dado_novo.quadra WHERE setor_cod = {setor_cod} AND cod = '{quadra_cod}'")
-#     return cur.fetchall()
 
 # Função para calcular o comprimento das testadas de um lote
 def calcular_comprimento_testadas(lote):
@@ -70,7 +68,9 @@ def encontrar_lote_proximo_a_ponto(ponto_inicial, gdf):
 
 
 # Função recursiva para percorrer os lotes e atribuir códigos
-def percorrer_lotes_recursivo(gdf, lote_atual, cod):
+def percorrer_lotes_recursivo(gdf, lote_atual):
+    global cod  # Declarar que a variável cod é global
+
     # Verificar se o lote atual é válido
     if lote_atual is None:
         return
@@ -90,19 +90,15 @@ def percorrer_lotes_recursivo(gdf, lote_atual, cod):
     # Encontrar o próximo lote vizinho mais próximo não visitado
     proximo_lote = encontrar_lote_vizinho_proximo(gdf.loc[~gdf['is_visited']].to_dict('records'), lote_atual)
     
-    while (proximo_lote != None) :
-    # Chamar recursivamente a função para o próximo lote
-      percorrer_lotes_recursivo(gdf, proximo_lote, cod)
-      proximo_lote = encontrar_lote_vizinho_proximo(gdf.loc[~gdf['is_visited']].to_dict('records'), lote_atual)
+    while proximo_lote is not None:
+        # Chamar recursivamente a função para o próximo lote
+        percorrer_lotes_recursivo(gdf, proximo_lote)
+        proximo_lote = encontrar_lote_vizinho_proximo(gdf.loc[~gdf['is_visited']].to_dict('records'), lote_atual)
 
-      
-    
-    
     
 
 # Chamar a função para buscar os lotes por quadra
 lotes = get_lotes_por_quadra(setor_cod=2, quadra_cod='132')
-# quadra = get_quadra(setor_cod=1, cod='130')
 
 # Criar GeoDataFrame a partir dos lotes
 gdf = gpd.GeoDataFrame(lotes, columns=['id', 'geometry', 'tam_testada'])
@@ -128,12 +124,16 @@ gdf['is_visited'] = False
 lote_inferior_esquerdo = encontrar_lote_proximo_a_ponto(initial_point, gdf)
 
 # Chamar a função recursiva para percorrer os lotes
-percorrer_lotes_recursivo(gdf, lote_inferior_esquerdo, cod=0)
+percorrer_lotes_recursivo(gdf, lote_inferior_esquerdo)
+
+# Exportar o GeoDataFrame para um arquivo shapefile
+gdf.to_file("arquivo_shapefile.shp")
 
 # Plotar o GeoDataFrame
 fig, ax = plt.subplots()
 gdf.plot(ax=ax, column='cod', legend=True, cmap='viridis', legend_kwds={'label': "Códigos"})
 
+ 
 # Adicionar rótulos aos polígonos usando o atributo 'cod'
 for x, y, label in zip(gdf.geometry.centroid.x, gdf.geometry.centroid.y, gdf['cod']):
     ax.text(x, y, str(label), fontsize=8, ha='right', bbox=dict(facecolor='white', alpha=0.5))
